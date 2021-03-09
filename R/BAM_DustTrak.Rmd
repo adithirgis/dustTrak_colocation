@@ -1,0 +1,651 @@
+---
+title: "Dustrak Analysis: 8530 and 8533 Collocation: Raw data analysis"
+author: "Adithi"
+date: "08 December 2020"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include = FALSE}
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(readr)
+library(reshape)
+library(openair)
+library(ggplot2)
+library(data.table)
+library(patchwork)
+
+```
+
+
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+reg_eqn <- function(x) {
+  int <- round(coef(x)[1], digits = 2)
+  slope <- round(coef(x)[2], digits = 2)
+  eqn <- paste("y = ", slope, "x + (", int, ")")
+  return(eqn)
+  }
+```
+
+
+```{r echo= FALSE, message = FALSE, warning=FALSE}
+completeFun <- function(data, desiredCols) {
+  completeVec <- complete.cases(data[, desiredCols])
+  return(data[completeVec, ])
+}
+theme2 <- theme_minimal() + theme(legend.text = element_text(size = 20),
+                                  legend.position = "bottom",
+                                  plot.title = element_text(size = 20, face = "bold", colour = "black"),
+                                  legend.title = element_blank(),
+                                  axis.title = element_text(size = 24, face = "bold"),
+                                  axis.text = element_text(size = 22, face = "bold"),
+                                  panel.border = element_rect(colour = "black",
+                                                              fill = NA, size = 1.2))
+theme1 <- theme_minimal() + theme(legend.text = element_text(size = 20),
+                                  legend.position = "bottom",
+                                  legend.title = element_blank(),
+                                  axis.title = element_text(size = 24, face = "bold"),
+                                  axis.title.x = element_text(size = 22),
+                                  axis.text = element_text(size = 24, face = "bold"),
+                                  axis.text.x = element_text(size = 22, face = "bold"),
+                                  panel.border = element_rect(colour = "black",
+                                                              fill = NA, size = 1.2))
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+
+Dustrak11 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_13_h173313_CSTEP_DT809_8530.csv", skip = 28)
+Dustrak11 <- Dustrak11 %>%
+  mutate(date = strptime(paste(`dd-MM-yyyy`, `hh:mm:ss`), format = "%d-%m-%Y %H:%M:%S")) %>%
+  mutate(date = as.POSIXct(date, format = '%Y-%m-%d %H:%M:%S', tz = "Asia/Kolkata"),
+         `DTII-809` = `mg/m^3` * 1000) %>%
+  select(date, `DTII-809`)
+
+Dustrak12 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_30_h134429_CSTEP_DT809_8530.csv", skip = 28)
+Dustrak12 <- Dustrak12 %>%
+  mutate(date = strptime(paste(`MM/dd/yyyy`, `hh:mm:ss`), format = "%m/%d/%Y %H:%M:%S")) %>%
+  mutate(date = as.POSIXct(date, format = '%Y-%m-%d %H:%M:%S', tz = "Asia/Kolkata"),
+         `DTII-809` = `mg/m^3` * 1000) %>%
+  select(date, `DTII-809`)
+Dustrak1 <- rbind(Dustrak11, Dustrak12)
+
+
+Dustrak21 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_13_h173158_CSTEP_DT811_8530.csv", skip = 28)
+Dustrak22 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_30_h134437_CSTEP_DT811_8530.csv", skip = 28)
+Dustrak2 <- rbind(Dustrak21, Dustrak22)
+Dustrak2 <- Dustrak2 %>%
+  mutate(date = strptime(paste(`dd-MM-yyyy`, `hh:mm:ss`), format = "%d-%m-%Y %H:%M:%S")) %>%
+  mutate(date = as.POSIXct(date, format = '%Y-%m-%d %H:%M:%S', tz = "Asia/Kolkata"),
+         `DTII-811` = `mg/m^3` * 1000) %>%
+  select(date, `DTII-811`)
+
+
+setDT(Dustrak2)
+setDT(Dustrak1)
+setkey(Dustrak1, date)
+setkey(Dustrak2, date)
+Final <- Dustrak2[Dustrak1, roll = "nearest"] 
+
+Final <- Final %>%
+  as.data.frame()
+Final <- completeFun(Final, c("DTII-809", "DTII-811"))
+Final$ID <- seq.int(nrow(Final))
+# write.csv(Final, "DTII_1min.csv")
+
+Final_melt <- melt(Final, id = "ID", measure.vars = c("DTII-809", "DTII-811"))
+names(Final_melt) <- c("ID", "Monitor", "PM2.5")
+
+p1 <- ggplot(data = Final_melt, aes(ID, as.numeric(PM2.5), col = Monitor)) +
+  geom_line(size = 1) + scale_x_continuous(breaks = seq(0, 15000, by = 2500)) +
+  labs(y = expression(paste(PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), x = "number of observations") + scale_y_continuous(limits = c(0, 200)) + theme1 + annotate(geom = "text", size = 7, x = 11250, y = 200, label = "one-minute observations") + theme( legend.position = c(.95, .95),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6))
+
+p1
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n <- nrow(Final)
+m <- lm(`DTII-811` ~ `DTII-809`, Final)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+Final$diffSq <- (Final$`DTII-811` - Final$`DTII-809`) ^ 2
+mean_diff_sqr <- mean(Final$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(Final_melt$PM2.5, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+
+
+p2 <- ggplot(data = Final, aes(x = `DTII-809`, y = `DTII-811`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(size = 1, color = "black") + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 35, y = 160) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "DTII-809", y = "DTII-811") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 35, y = 170) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " one-minute observations")), x = 37, y = 180) +
+  annotate("text", size = 7, label = expr(paste("RMSD: ", !!rmse, "0 ", mu, "g ", ~m^{-3})), x = 35, y = 150) +  annotate("text", size = 7, label = expr(paste("NRMSD: ", !!nrmse, "%")), x = 35, y = 140) + scale_x_continuous(limits = c(0, 200)) + scale_y_continuous(limits = c(0, 200)) + theme2
+p2
+
+
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+
+Final$Resi <- (Final$`DTII-811` - Final$`DTII-809`)
+Final$Avg <- (Final$`DTII-811` + Final$`DTII-809`) / 2
+
+p2 <- ggplot(data = Final, aes(x = Avg, y = Resi)) +
+  geom_point(size = 1, color = "black") + 
+  labs(x = "Mean", y = "Difference") + scale_x_continuous() + scale_y_continuous() + theme2 + geom_text(aes(label = "DTII-8530"), x = -Inf, y = Inf, hjust = -0.5, vjust = 1.5, colour = "black", size = 8) + theme(legend.position = "none") 
+p2
+
+
+```
+
+
+
+```{r warning = FALSE, message = FALSE}
+
+Final_r <- Final
+Final <- timeAverage(Final, avg.time = "1 hour")
+Final <- completeFun(Final, c("DTII-809", "DTII-811"))
+Final$ID <- seq.int(nrow(Final))
+setDT(Final)
+Final_melt <- melt(Final, id = "ID", measure.vars = c("DTII-809", "DTII-811"))
+names(Final_melt) <- c("ID", "Monitor", "PM2.5")
+
+p3 <- ggplot(data = Final_melt, aes(ID, as.numeric(PM2.5), col = Monitor)) +
+  geom_line(size = 1.2) + scale_x_continuous(breaks = seq(0, 250, by = 50)) +
+  labs(y = expression(paste(PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), x = "number of observations") + scale_y_continuous(limits = c(0, 150)) + theme1 + annotate(geom = "text", size = 7, x = 200, y = 150, label = "one-hour average") + theme(legend.position = c(.95, .95),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6))
+
+p3
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n <- nrow(Final)
+m <- lm(`DTII-811` ~ `DTII-809`, Final)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+Final$diffSq <- (Final$`DTII-811` - Final$`DTII-809`) ^ 2
+mean_diff_sqr <- mean(Final$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(Final_melt$PM2.5, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+p4 <- ggplot(data = Final, aes(x = `DTII-809`, y = `DTII-811`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(size = 2, color = "black") + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 30, y = 120) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "DTII-809", y = "DTII-811") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 30, y = 130) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " one-hour average")), x = 30, y = 140) +
+  annotate("text", size = 7, label = expr(paste("RMSD: ", !!rmse, " ", mu, "g ", ~m^{-3})), x = 30, y = 110) +  annotate("text", size = 7, label = expr(paste("NRMSD: ", !!nrmse, "%")), x = 30, y = 100) + scale_x_continuous(limits = c(0, 150)) + scale_y_continuous(limits = c(0, 150)) + theme2
+p4
+
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+
+Final$Resi <- (Final$`DTII-811` - Final$`DTII-809`)
+Final$Avg <- (Final$`DTII-811` + Final$`DTII-809`) / 2
+ine <- mean(Final$Resi, na.rm = TRUE)
+ine_3 <- 1.96 * sd(Final$Resi, na.rm = TRUE)
+Final$diffSq <- NULL
+p2 <- ggplot(data = Final, aes(x = Avg, y = Resi)) + geom_hline(yintercept = ine, size = 0.8) + geom_hline(yintercept = ine, size = 0.8) + geom_hline(yintercept = as.numeric(ine - ine_3), size = 0.8, linetype = "dashed") + geom_hline(yintercept = as.numeric(ine + ine_3), size = 0.8, linetype = "dashed") + geom_point(size = 2, color = "black") +  
+  labs(x = expression(paste("Mean ", PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), y = expression(paste("Difference ", PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), title = "Bland-Altman plot") + scale_x_continuous() + scale_y_continuous(limits = c(-15, 15)) + theme2 + geom_text(aes(label = "DT II-8530"), x = Inf, y = -Inf, hjust = 1.5, vjust = -1.5, colour = "black", size = 8) + theme(legend.position = "none") 
+p2
+
+```
+
+```{r, echo= FALSE,message=FALSE, warning=FALSE}
+
+Dustrak11 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_13_h173309_CSTEP_DT602_8533.csv", skip = 28)
+Dustrak12 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_30_h134435_CSTEP_DT602_8533.csv", skip = 28)
+Dustrak1 <- rbind(Dustrak11, Dustrak12)
+Dustrak1 <- Dustrak1 %>%
+  dplyr::select("Date" = `dd-MM-yyyy`, "Time" = `hh:mm:ss`, "DTDRX-602" = `mg/m^3_1`) %>%
+  mutate(date = strptime(paste(Date, Time), format = "%d-%m-%Y %H:%M:%S", tz = "Asia/Kolkata"), 
+         `DTDRX-602` = `DTDRX-602` * 1000) %>%
+  mutate(date = as.POSIXct(date, format = "%y-%m-%d %H:%M:%S", tz = "Asia/Kolkata")) %>%
+  select(date, `DTDRX-602`)
+
+
+Dustrak21 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_13_h173246_CSTEP_DT603_8533.csv", skip = 28)
+Dustrak22  <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_30_h134439_CSTEP_DT603_8533.csv", skip = 28)
+  
+Dustrak2  <- rbind(Dustrak21, Dustrak22)
+Dustrak2 <- Dustrak2 %>%
+  dplyr::select("Date" = `dd-MM-yyyy`, "Time" = `hh:mm:ss`, "DTDRX-603" = `mg/m^3_1`) %>%
+  mutate(date = strptime(paste(Date, Time), format = "%d-%m-%Y %H:%M:%S", tz = "Asia/Kolkata"), 
+         `DTDRX-603` = `DTDRX-603` * 1000) %>%
+  mutate(date = as.POSIXct(date, format = "%y-%m-%d %H:%M:%S", tz = "Asia/Kolkata")) %>%
+  select(date, `DTDRX-603`)
+
+setDT(Dustrak2)
+setDT(Dustrak1)
+setkey(Dustrak1, date)
+setkey(Dustrak2, date)
+
+Final1 <- Dustrak1[Dustrak2, roll = "nearest"] 
+
+Final1 <- Final1[Final1$`DTDRX-603` > 0, ]
+Final1 <- Final1[Final1$`DTDRX-603` <= 200, ]
+Final1 <- Final1[Final1$`DTDRX-602` <= 200, ]
+Final1 <- data.frame(Final1)
+Final1 <- openair::timeAverage(Final1, avg.time = "1 hour")
+names(Final1) <- c("date", "DTDRX-602", "DTDRX-603")
+Final1 <- completeFun(Final1, c("DTDRX-603", "DTDRX-602"))
+Final1$ID <- seq.int(nrow(Final1))
+setDT(Final1)
+Fina <- melt(Final1, id = "ID", measure.vars = c("DTDRX-603", "DTDRX-602"))
+names(Fina) <- c("ID", "Monitor", "PM2.5")
+
+
+p5 <- ggplot(data = Fina, aes(ID, as.numeric(PM2.5), col = Monitor)) +
+  geom_line(size = 1.2) + scale_x_continuous(breaks = seq(0, 250, by = 50)) +
+  labs(y = expression(paste(PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), x = "number of observations") + scale_y_continuous(limits = c(0, 100)) + theme1 + annotate(geom = "text", size = 7, x = 200, y = 100, label = "one-hour average") + theme( legend.position = c(.95, .95),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6))
+
+p5
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n <- nrow(Final1)
+m <- lm(`DTDRX-603` ~ `DTDRX-602`, Final1)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+Final1$diffSq <- (Final1$`DTDRX-603` - Final1$`DTDRX-602`) ^ 2
+mean_diff_sqr <- mean(Final1$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(Fina$PM2.5, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+p6 <- ggplot(data = Final1, aes(x = `DTDRX-602`, y = `DTDRX-603`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(color = "black", size = 2) + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 15, y = 80) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "DTDRX-602", y = "DTDRX-603") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 15, y = 85) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " one-hour average")), x = 15, y = 90) +
+  annotate("text", size = 7, label = expr(paste("RMSD: ", !!rmse, " ", mu, "g ", ~m^{-3})), x = 15, y = 75) +  annotate("text", size = 7, label = expr(paste("NRMSD: ", !!nrmse, "%")), x = 15, y = 70) + scale_x_continuous(limits = c(0, 100)) + scale_y_continuous(limits = c(0, 100)) + theme2
+p6
+```
+
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+
+Final1$Resi <- (Final1$`DTDRX-603` - Final1$`DTDRX-602`)
+Final1$Avg <- (Final1$`DTDRX-603` + Final1$`DTDRX-602`) / 2
+
+ine <- mean(Final1$Resi, na.rm = TRUE)
+ine_3 <- 1.96 * sd(Final1$Resi, na.rm = TRUE)
+
+p2 <- ggplot(data = Final1, aes(x = Avg, y = Resi)) + geom_hline(yintercept = ine, size = 0.8) + geom_hline(yintercept = ine, size = 0.8) + geom_hline(yintercept = as.numeric(ine - ine_3), size = 0.8, linetype = "dashed") + geom_hline(yintercept = as.numeric(ine + ine_3), size = 0.8, linetype = "dashed") + geom_point(size = 2, color = "black") +  
+  labs(x = expression(paste("Mean ", PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), y = expression(paste("Difference ", PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), title = "Bland-Altman plot") + scale_x_continuous() + scale_y_continuous(limits = c(-15, 15)) + theme2 + geom_text(aes(label = "DT DRX-8533"), x = Inf, y = -Inf, hjust = 1.5, vjust = -1.5, colour = "black", size = 8) + theme(legend.position = "none") 
+p2
+
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+
+Final_all <- left_join(Final, Final1, by = "date")
+Final_all$ID <- seq.int(nrow(Final_all))
+setDT(Final_all)
+Final_all_m <- melt(Final_all, id = "date", measure.vars = c("DTII-809", "DTII-811", "DTDRX-602", "DTDRX-603"))
+names(Final_all_m) <- c("date", "Monitor", "PM2.5")
+Final_all_m$type = factor(cumsum(c(0, as.numeric(diff(Final_all_m$date) - 1))))
+# write.csv(Final_all, "DT_1hour.csv")
+p7 <- ggplot(data = Final_all_m, aes(date, as.numeric(PM2.5), col = Monitor)) +
+  geom_line(aes(group = type), size = 1.2) + 
+  labs(y = expression(paste(PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), x = "") + scale_y_continuous(limits = c(0, 125)) + theme1  + theme(legend.position = c(.95, .95), legend.justification = c("right", "top"), legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6), axis.title.x = element_blank()) + annotate(geom = "text", size = 7, x = as.POSIXct("2019-08-30 23:00:00"), y = 125, label = "one-hour average")
+p7
+
+```
+
+
+
+```{r results = 'hide', message = FALSE, warning = FALSE}
+dir <- "D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/BAM_files/"
+# CSTEP_BAM.CSV
+df_bam_1hr <- data.frame()
+shp_list1 <- list.files(dir, pattern = "\\.CSV$")
+for (fil in (shp_list1)) {
+  bam <- read.csv(paste0("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/BAM_files/", fil), skip = 4)#BAM skip 5 for UT BAM
+  bam <- bam %>%
+    mutate(date = as.POSIXct(Time, format='%Y-%m-%d  %H:%M:%S', tz = "Asia/Kolkata")) %>%
+    select(date, "BAM1022-697" = ConcHR.ug.m3., "RT_BAM" = ConcRT.ug.m3., "FRH" = FRH..., "Status" = Status)
+  df_bam_1hr <- rbind(df_bam_1hr, bam)
+}
+df_bam_1hr <- setDT(df_bam_1hr)[order(date)]
+df_bam_1hr <- df_bam_1hr[, .(date = date[1], `BAM1022-697` = `BAM1022-697`[1], RT_BAM = RT_BAM[1], FRH = FRH[1], Status = Status[1]), by = .(Group = floor_date(date, "hour"))] 
+ix <- which(df_bam_1hr$RT_BAM >= 1000 | df_bam_1hr$FRH > 45 | df_bam_1hr$`BAM1022-697` < 0 | df_bam_1hr$RT_BAM < 0 )
+df_bam_1hr <- df_bam_1hr[-c(ix, ix + 1), ]
+df_bam_1hr <- df_bam_1hr[df_bam_1hr$Status == 0,]
+df_bam_1hr <- df_bam_1hr %>%
+  dplyr::select(date, `BAM1022-697`)
+# df_bam_1hr<-filter(df_bam_1hr, (month(date) >= 07 & day(date) > 04) )
+df_bam_1hr <- df_bam_1hr[date >= "2019-07-04 18:00:00"]
+df_bam_1hr <- df_bam_1hr[!duplicated(df_bam_1hr$date), ]
+setDT(df_bam_1hr)
+setkey(df_bam_1hr, date)
+
+df_bam1_1hr <- read.csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/UT_BAM.CSV", sep = ",", skip = 4)
+df_bam1_1hr <- df_bam1_1hr %>%
+    mutate(date = as.POSIXct(Time, format='%Y-%m-%d  %H:%M:%S', tz = "Asia/Kolkata")) %>%
+    select(date, "BAM1022-131" = ConcHR.ug.m3., "RT_BAM" = ConcRT.ug.m3., "FRH" = FRH..., "Status" = Status)
+bam1 <- read.csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/UT_BAM_DATA.CSV", sep = ",", skip = 4)
+bam1 <- bam1 %>%
+    mutate(date = as.POSIXct(Time, format='%d-%m-%Y  %H:%M', tz = "Asia/Kolkata")) %>%
+    select(date, "BAM1022-131" = ConcHR.ug.m3., "RT_BAM" = ConcRT.ug.m3., "FRH" = FRH..., "Status" = Status)
+bam1 <- filter(bam1, (month(date) > 06))
+bam2 <- read.csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/DT112744.CSV", sep = ",", skip = 4)
+
+bam2 <- bam2 %>%
+    mutate(date = as.POSIXct(Time, format='%Y-%m-%d  %H:%M:%S', tz = "Asia/Kolkata")) %>%
+    select(date, "BAM1022-131" = ConcHR.ug.m3., "RT_BAM" = ConcRT.ug.m3., "FRH" = FRH..., "Status" = Status)
+
+df_bam1_1hr <- rbind(bam1, df_bam1_1hr, bam2)
+df_bam1_1hr <- setDT(df_bam1_1hr)[order(date)]
+df_bam1_1hr <- df_bam1_1hr[date >= "2019-07-04 18:00:00"]
+df_bam1_1hr <- df_bam1_1hr[, .(date = date[1], `BAM1022-131` = `BAM1022-131`[1], RT_BAM = RT_BAM[1], FRH = FRH[1], Status = Status[1]), by = .(Group = floor_date(date, "hour"))] 
+ix <- which(df_bam1_1hr$RT_BAM >= 1000 | df_bam1_1hr$`BAM1022-131` < 0 | df_bam1_1hr$FRH > 45 | df_bam1_1hr$RT_BAM < 0)
+df_bam1_1hr <- df_bam1_1hr[-c(ix, ix + 1), ]
+df_bam1_1hr <- df_bam1_1hr[df_bam1_1hr$Status == 0, ]
+df_bam1_1hr <- df_bam1_1hr[!duplicated(df_bam1_1hr$date), ]
+
+setDT(df_bam1_1hr)
+setkey(df_bam1_1hr, date)
+
+hr_1 <- df_bam1_1hr[df_bam_1hr, roll = "nearest"] 
+hr_1 <- hr_1[date <= "2019-09-14 01:00:00"]
+hr_1 <- dplyr::select(hr_1, date, `BAM1022-697`, `BAM1022-131`)
+hr_1 <- hr_1[!duplicated(hr_1$date), ]
+# write.csv(hr_1, "BAM_CSTEP_UT_1hour.csv")
+
+hr_6 <- timeAverage(hr_1, avg.time = "6 hour")
+
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+hr_1 <- data.frame(hr_1)
+
+hr_1$ID <- seq.int(nrow(hr_1))
+names(hr_1) <- c("date", "BAM1022-697", "BAM1022-131", "ID")
+hr_all_m <- melt(hr_1, id = "ID", measure.vars = c("BAM1022-697", "BAM1022-131"))
+names(hr_all_m) <- c("ID", "Monitor", "PM2.5")
+
+
+p8 <- ggplot(data = hr_all_m, aes(ID, as.numeric(PM2.5), col = Monitor)) +
+  geom_line(size = 1.2) + scale_x_continuous(breaks = seq(0, 1600, by = 300)) +
+  labs(y = expression(paste(PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), x = "number of observations") + scale_y_continuous(limits = c(0, 80)) + theme1 + annotate(geom = "text", size = 7, x = 1300, y = 80, label = "one-hour average") + theme( legend.position = c(.95, .95),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6))
+p8
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n <- nrow(hr_1)
+m <- lm(`BAM1022-697` ~ `BAM1022-131`, hr_1)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+hr_1$diffSq <- (hr_1$`BAM1022-697` - hr_1$`BAM1022-131`) ^ 2
+mean_diff_sqr <- mean(hr_1$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(hr_all_m$PM2.5, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+p9 <- ggplot(data = hr_1, aes(x = `BAM1022-131`, y = `BAM1022-697`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(color = "black", size = 2) + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 15, y = 65) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "BAM1022-131", y = "BAM1022-697") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 15, y = 70) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " one-hour average")), x = 15, y = 75) +
+  annotate("text", size = 7, label = expr(paste("RMSD: ", !!rmse, " ", mu, "g ", ~m^{-3})), x = 15, y = 60) +  annotate("text", size = 7, label = expr(paste("NRMSD: ", !!nrmse, "%")), x = 15, y = 55) + scale_x_continuous(limits = c(0, 80)) + scale_y_continuous(limits = c(0, 80)) + theme2
+p9
+
+```
+
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+
+hr_1$Resi <- (hr_1$`BAM1022-697` - hr_1$`BAM1022-131`)
+hr_1$Avg <- (hr_1$`BAM1022-697` + hr_1$`BAM1022-131`) / 2
+
+ine <- mean(hr_1$Resi, na.rm = TRUE)
+ine_3 <- 1.96 * sd(hr_1$Resi, na.rm = TRUE)
+
+p2 <- ggplot(data = hr_1, aes(x = Avg, y = Resi)) + geom_hline(yintercept = ine, size = 0.8) + geom_hline(yintercept = ine, size = 0.8) + geom_hline(yintercept = as.numeric(ine - ine_3), size = 0.8, linetype = "dashed") + geom_hline(yintercept = as.numeric(ine + ine_3), size = 0.8, linetype = "dashed") + geom_point(size = 2, color = "black") +  
+  labs(x = expression(paste("Mean ", PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), y = expression(paste("Difference ", PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), title = "Bland-Altman plot") + scale_x_continuous() + scale_y_continuous(limits = c(-15, 15)) + theme2 + geom_text(aes(label = "BAM1022"), x = Inf, y = -Inf, hjust = 1.5, vjust = -1.5, colour = "black", size = 8) + theme(legend.position = "none") 
+p2
+
+
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+hr_6 <- data.frame(hr_6)
+names(hr_6) <- c("date", "BAM1022-697", "BAM1022-131")
+hr_6 <- completeFun(hr_6, c("BAM1022-697", "BAM1022-131"))
+hr_6$ID <- seq.int(nrow(hr_6))
+names(hr_6) <- c("date", "BAM1022-697", "BAM1022-131", "ID")
+hr_6_all_m <- melt(hr_6, id = "ID", measure.vars = c("BAM1022-697", "BAM1022-131"))
+names(hr_6_all_m) <- c("ID", "Monitor", "PM2.5")
+
+
+p10 <- ggplot(data = hr_6_all_m, aes(ID, as.numeric(PM2.5), col = Monitor)) +
+  geom_line(size = 1.2) + scale_x_continuous(breaks = seq(0, 300, by = 50)) +
+  labs(y = expression(paste(PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), x = "number of observations") + scale_y_continuous(limits = c(0, 40)) + theme1 + annotate(geom = "text", size = 7, x = 230, y = 40, label = "six-hour average") + theme( legend.position = c(.95, .95),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6))
+p10
+
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n <- nrow(hr_6)
+m <- lm(`BAM1022-697` ~ `BAM1022-131`, hr_6)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+hr_6$diffSq <- (hr_6$`BAM1022-697` - hr_6$`BAM1022-131`) ^ 2
+mean_diff_sqr <- mean(hr_6$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(hr_6_all_m$PM2.5, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+p11 <- ggplot(data = hr_6, aes(x = `BAM1022-131`, y = `BAM1022-697`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(color = "black", size = 2) + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 5, y = 29) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "BAM1022-131", y = "BAM1022-697") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 5, y = 32) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " six-hour average")), x = 5, y = 35) +
+  annotate("text", size = 7, label = expr(paste("RMSD: ", !!rmse, " ", mu, "g ", ~m^{-3})), x = 5, y = 26) +  annotate("text", size = 7, label = expr(paste("NRMSD: ", !!nrmse, "%")), x = 5, y = 23) + scale_x_continuous(limits = c(0, 40)) + scale_y_continuous(limits = c(0, 40)) + theme2
+p11
+```
+
+
+
+```{r, results = 'hide', message = FALSE, warning = FALSE}
+VecFunc <- function(x) {
+  if (x > 0.6) {
+    return (1+(0.25*(((x)*(x))/(1-x))))
+  } 
+  
+  else
+  {
+    return (1)
+  }
+}
+
+dir <- "D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/Met/"
+files <- list.files(dir, pattern = "\\.CSV$")
+df <- data.frame()
+for(each_file in (files)) {
+  met_one <- read.csv(paste("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/Met/", each_file, sep = ""), skip = 1)
+  df <- rbind(df, met_one)
+}
+df <- df[df$ATMP.degC. != 0.000, ]
+df <- df[df$HUMD.per. != 0.000, ]
+df <- df %>% 
+  mutate(RH = HUMD.per. / 100,
+         date = as.POSIXct(paste(as.Date(Date, format = "%d/%m/%Y"), Time), tz = "Asia/Kolkata")) %>%
+  select(date, RH, "Temp" = ATMP.degC.)
+
+setDT(df)
+setkey(df, date)
+
+
+
+df_DT809 <- data.frame()
+df_bam <- data.frame()
+df_DT809_1hr <- data.frame()
+
+dir <- "D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/DT/"
+shp_list <- list.files(dir, pattern = "\\.csv$")
+for (file in (shp_list)) {
+  Dustrak1 <- read.csv(paste("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/DT/", file, sep = ""), skip = 28)
+  Dustrak1 <- Dustrak1 %>%
+    mutate(date = strptime(paste(dd.MM.yyyy, hh.mm.ss), format = "%d-%m-%Y %H:%M:%S", tz = "Asia/Kolkata"), 
+           "DTII-809" = mg.m.3 * 1000) %>%
+    select(date, `DTII-809`) %>%
+    mutate(date = as.POSIXct(date, format = '%Y-%m-%d %H:%M:%S', tz = "Asia/Kolkata"))
+  df_DT809 <- rbind(df_DT809, Dustrak1)
+}
+
+
+setDT(df_DT809)
+setkey(df_DT809, date)
+min <- df_DT809[df, roll = "nearest"] 
+min <- data.frame(min)
+names(min) <- c("date", "DTII-809", "RH", "Temp")
+min <- completeFun(min, c("RH", "DTII-809"))
+min$CF <- sapply(min$RH, FUN = VecFunc)
+min$`DTII-809_RH` <- min$`DTII-809` / min$CF  
+min <- min[min$`DTII-809` > 0, ]
+min <- min[min$`DTII-809` <= 1000, ]
+min <- min[!duplicated(min$date), ]
+df_DT809_1hr <- timeAverage(min, avg.time = "1 hour")
+df_DT809_1hr <- completeFun(df_DT809_1hr, c("DTII-809"))
+setDT(df_DT809_1hr)
+setkey(df_DT809_1hr, date)
+
+
+# BAM
+
+df_bam_1hr <- data.frame()
+dir <- "D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/BAM_DT_files/"
+shp_list1 <- list.files(dir, pattern = "\\.CSV$")
+for (fil in (shp_list1)) {
+  bam <- read.csv(paste("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/BAM_DT_files/", fil, sep = ""), skip = 4)#BAM skip 5 for UT BAM
+  df_bam_1hr <- rbind(df_bam_1hr, bam)
+}
+df_bam_1hr <- df_bam_1hr %>%
+  mutate(date = as.POSIXct(Time, format = '%Y-%m-%d %H:%M:%S', tz = "Asia/Kolkata")) %>%
+  select(date, "BAM1022-697" = ConcHR.ug.m3., "RT_BAM" = ConcRT.ug.m3., "FRH" = FRH..., "Status" = Status)
+df_bam_1hr <- setDT(df_bam_1hr)[order(date)]
+df_bam_1hr <- df_bam_1hr[, .(date = date[1], `BAM1022-697` = `BAM1022-697`[1], RT_BAM = RT_BAM[1], FRH = FRH[1], Status = Status[1]), by = .(Group = floor_date(date, "hour"))] 
+ix <- which(df_bam_1hr$RT_BAM >= 1000 | df_bam_1hr$FRH > 45 | df_bam_1hr$`BAM1022-697` < 0 | df_bam_1hr$RT_BAM < 0)
+df_bam_1hr <- df_bam_1hr[-c(ix, ix + 1), ]
+df_bam_1hr <- df_bam_1hr[df_bam_1hr$Status == 0, ]
+df_bam_1hr <- df_bam_1hr %>%
+  dplyr::select(date, `BAM1022-697`)          
+
+df_bam_1hr<-df_bam_1hr[!duplicated(df_bam_1hr$date), ]
+setkey(df_bam_1hr, date)
+
+hr_1 <- df_bam_1hr[df_DT809_1hr, roll = "nearest"] 
+hr_1 <- hr_1[date <= "2019-07-26 11:00:00"]
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+hr_1 <- hr_1 %>%
+  as.data.frame() %>%
+  mutate(ID = seq.int(nrow(hr_1)))
+  
+hr_all_m <- melt(hr_1, id = "ID", measure.vars = c("BAM1022-697", "DTII-809"))
+names(hr_all_m) <- c("ID", "Monitor", "PM2.5")
+
+
+p12 <- ggplot(data = hr_all_m, aes(ID, as.numeric(PM2.5), col = Monitor)) +
+  geom_line(size = 1.2) + scale_x_continuous(breaks = seq(0, 350, by = 50)) +
+  labs(y = expression(paste(PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), x = "number of observations") + scale_y_continuous(limits = c(0, 130)) + theme1 + annotate(geom = "text", size = 7, x = 200, y = 130, label = "one-hour average") + theme( legend.position = c(.95, .95),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6))
+
+p12
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+# hr_1 <- openair::timeAverage(hr_1, avg.time = "6 hour")
+n <- nrow(hr_1)
+m <- lm(`BAM1022-697` ~ `DTII-809`, hr_1)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+hr_1$diffSq <- (hr_1$`BAM1022-697` - hr_1$`DTII-809`) ^ 2
+mean_diff_sqr <- mean(hr_1$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(hr_1$`BAM1022-697`, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+p13 <- ggplot(data = hr_1, aes(x = `DTII-809`, y = `BAM1022-697`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(color = "black", size = 2) + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 30, y = 105) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "DTII-809", y = "BAM1022-697") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 30, y = 115) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " one-hour average")), x = 30, y = 125) +
+  annotate("text", size = 7, label = expr(paste("RMSE: ", !!rmse, " ", mu, "g ", ~m^{-3})), x = 30, y = 95) +  annotate("text", size = 7, label = expr(paste("NRMSE: ", !!nrmse, "%")), x = 30, y = 85) + scale_x_continuous(limits = c(0, 130)) + scale_y_continuous(limits = c(0, 130)) + theme2
+p13
+
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+hr_1 <- hr_1 %>%
+  as.data.frame() %>%
+  mutate(ID = seq.int(nrow(hr_1)))
+  
+hr_all_m <- melt(hr_1, id = "ID", measure.vars = c("BAM1022-697", "DTII-809_RH"))
+names(hr_all_m) <- c("ID", "Monitor", "PM2.5")
+
+
+p14 <- ggplot(data = hr_all_m, aes(ID, as.numeric(PM2.5), col = Monitor)) +
+  geom_line(size = 1.2) + scale_x_continuous(breaks = seq(0, 350, by = 50)) +
+  labs(y = expression(paste(PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), x = "number of observations") + scale_y_continuous(limits = c(0, 75)) + theme1 + annotate(geom = "text", size = 7, x = 200, y = 75, label = "one-hour average") + theme( legend.position = c(.95, .95),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6))
+
+p14
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n <- nrow(hr_1)
+m <- lm(`BAM1022-697` ~ `DTII-809_RH`, hr_1)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+hr_1$diffSq <- (hr_1$`BAM1022-697` - hr_1$`DTII-809_RH`) ^ 2
+mean_diff_sqr <- mean(hr_1$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(hr_1$`BAM1022-697`, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+p15 <- ggplot(data = hr_1, aes(x = `DTII-809_RH`, y = `BAM1022-697`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(color = "black", size = 2) + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 15, y = 65) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "DTII-809_RH", y = "BAM1022-697") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 15, y = 70) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " one-hour average")), x = 15, y = 75) +
+  annotate("text", size = 7, label = expr(paste("RMSE: ", !!rmse, " ", mu, "g ", ~m^{-3})), x = 15, y = 60) +  annotate("text", size = 7, label = expr(paste("NRMSE: ", !!nrmse, "%")), x = 15, y = 55) + scale_x_continuous(limits = c(0, 75)) + scale_y_continuous(limits = c(0, 75)) + theme2
+p15
+
+```

@@ -1,0 +1,239 @@
+---
+title: "MAPAN_2"
+author: "Adithi R. Upadhya, ILK Labs"
+date: "1/30/2021"
+output: 
+  html_document:
+    df_print: paged
+    fig_width: 10
+    fig_height: 6
+    toc: true
+    code_folding: hide
+    number_sections: true
+    toc_float: true
+    fig_caption: true
+theme: yeti
+---
+
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(readr)
+library(reshape)
+library(openair)
+library(ggplot2)
+library(data.table)
+library(ggpubr)
+
+```
+
+
+
+```{r}
+reg_eqn <- function(x){
+  R_sq <- round(as.numeric(x$r.squared), digits = 2)
+  int <- round(coef(x)[1], digits = 2)
+  slope <- round(coef(x)[2], digits = 2)
+  eqn <- paste("y = ", slope, "x + ( ", int, ")")
+  return(eqn)
+}
+VecFunc <- function(x) {
+        if (x > 0.6) {
+          return (1 + (0.25 * (((x) * (x)) / (1 - x))))
+        } else
+        {
+          return (1)
+        }
+}
+theme2 <- theme_minimal() + theme(legend.text = element_text(size = 20),
+                                  legend.position = "bottom",
+                                  legend.title = element_blank(),
+                                  axis.title = element_text(size = 24, face = "bold"),
+                                  axis.text = element_text(size = 22, face = "bold"),
+                                  panel.border = element_rect(colour = "black",
+                                                              fill = NA, size = 1.2))
+theme1 <- theme_minimal() + theme(legend.text = element_text(size = 16),
+                                  legend.position = "bottom",
+                                  legend.title = element_blank(),
+                                  axis.title = element_text(size = 24, face = "bold"),
+                                  axis.text = element_text(size = 22, face = "bold"),
+                                  panel.border = element_rect(colour = "black",
+                                                              fill = NA, size = 1.2))
+```
+
+
+
+```{r  message=FALSE, warning=FALSE}
+
+bam <- read.csv(paste0("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/","2019_11_28_h180000_CSTEP_BAM.CSV", sep =""), skip = 4)
+bam <- bam %>%
+  mutate(date = as.POSIXct(Time, format = '%Y-%m-%d  %H:%M:%S', tz = "Asia/Kolkata")) %>%
+  select(date, "BAM" = ConcHR.ug.m3., "RT_BAM" = ConcRT.ug.m3., "FRH" = FRH..., Status)
+
+df_bam_1hr <- bam
+df_bam_1hr <- setDT(df_bam_1hr)[order(date)]
+df_bam_1hr <- df_bam_1hr[, .(date = date[1], BAM = BAM[1], RT_BAM = RT_BAM[1], FRH = FRH[1], Status = Status[1]), by = .(Group = floor_date(date, "hour"))] 
+
+ix <- which(df_bam_1hr$RT_BAM >= 1000 | df_bam_1hr$FRH > 45 | df_bam_1hr$BAM < 0 | df_bam_1hr$RT_BAM < 0 )
+df_bam_1hr <- df_bam_1hr[-c(ix, ix + 1), ]
+df_bam_1hr <- df_bam_1hr[df_bam_1hr$Status== 0, ]
+df_bam_1hr <- df_bam_1hr %>%
+  dplyr::select(date, "BAM1022-697" = BAM)
+df_bam_1hr <- df_bam_1hr[date >= "2020-01-20 10:00:00"]
+df_bam_1hr <- df_bam_1hr[date <= "2020-01-25 17:00:00"]
+df_bam_1hr <- df_bam_1hr[!duplicated(df_bam_1hr$date), ]
+setDT(df_bam_1hr)
+setkey(df_bam_1hr, date)
+
+Dustrak1 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2020_01_20_h130158_CSTEP_DT811.csv", skip = 28)
+names(Dustrak1) <- c("Date", "Time", "DT811")
+Dustrak1$date <- as.POSIXct(strptime(paste(Dustrak1$Date, Dustrak1$Time), format = "%d-%m-%Y %H:%M:%S", tz = "Asia/Kolkata"), format = '%d-%m-%Y %H:%M:%S', tz = "Asia/Kolkata")
+Dustrak1 <- Dustrak1 %>%
+  select(date, DT811)
+Dustrak1$DT811 <- Dustrak1$DT811 * 1000
+
+
+
+Dustrak2 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2020_01_20_h130138_CSTEP_DT809.csv", skip = 28)
+names(Dustrak2) <- c("Date","Time", "DT809_dryer")
+Dustrak2$date <- as.POSIXct(strptime(paste(Dustrak2$Date, Dustrak2$Time), format = "%d-%m-%Y %H:%M:%S", tz = "Asia/Kolkata"), format = '%d-%m-%Y %H:%M:%S', tz = "Asia/Kolkata") 
+Dustrak2 <- Dustrak2 %>%
+  select(date, DT809_dryer)
+Dustrak2$DT809_dryer <- Dustrak2$DT809_dryer * 1000
+
+Dustrak1 <- data.table(Dustrak1)
+Dustrak2 <- data.table(Dustrak2)
+setkey(Dustrak2, date)
+setkey(Dustrak1, date)
+Dustrak1 <- Dustrak1[Dustrak2, roll = "nearest"] 
+
+
+
+df <- data.frame()
+met_one<- read.csv(paste("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/", "2019_12_19_h151000_CSTEP_MET.CSV", sep = ""), skip = 4)
+df <- rbind(df, met_one)
+df <- df[df$AT..C. != 0.000, ]
+df <- df[df$RH.... != 0.000, ]
+df$TIME <- as.POSIXct(df$TIME , format="%Y-%m-%d %H:%M:%S")
+df <- df%>%
+  dplyr::select("date" = TIME, "RH" = RH....) %>%
+  filter(RH <= 95)
+
+df <- data.table(df)
+Dustrak1<-data.table(Dustrak1)
+
+setkey(Dustrak1, date)
+setkey(df, date)
+Dustrak1 <- df[Dustrak1, roll = "nearest"] 
+Dustrak1$RH <- Dustrak1$RH / 100
+Dustrak1$CF <- sapply(Dustrak1$RH, FUN = VecFunc)
+Dustrak1$DT811_RH <- Dustrak1$DT811 / Dustrak1$CF
+# Dustrak1$ratio <- Dustrak1$DT811 / Dustrak1$DT809_dryer
+# Dustrak1$diff <- Dustrak1$DT811 - Dustrak1$DT809_dryer
+Dust_final <- Dustrak1
+
+df_bam_1hr <- data.table(df_bam_1hr)
+Dustrak1 <- data.table(Dustrak1)
+Dustrak1$hour <- lubridate::ceiling_date(Dustrak1$date, "hour")
+Dustrak1 <- Dustrak1%>%
+  select(hour, DT809_dryer, DT811, DT811_RH) %>%
+  group_by(hour)%>%
+  summarise_each(funs(mean))
+names(Dustrak1) <- c("date", "DTII-809_dryer", "DTII-811", "DTII-811_RH")
+Dustrak1 <- data.table(Dustrak1)
+setkey(Dustrak1, date)
+setkey(df_bam_1hr, date)
+Final <- df_bam_1hr[Dustrak1, roll = "nearest"] 
+Final <- dplyr::select(Final, date, `DTII-809_dryer`, `DTII-811`, `DTII-811_RH`, `BAM1022-697`)
+
+Fina <- melt(Final, id = "date", measure.vars = c("DTII-809_dryer", "DTII-811", "DTII-811_RH", "BAM1022-697"))
+names(Fina) <- c("date", "Monitor", "PM2.5")
+
+
+line <- ggplot(data = Fina, aes(date, as.numeric(PM2.5), col = Monitor))+
+  geom_line(size = 1.2) + labs(y = expression(paste(PM[2.5], " (", mu, "g ", ~m^{-3}, ")")), x = "") + scale_x_datetime(date_labels = "%b %d", date_breaks = "24 hours", timezone = 'Asia/Kolkata') + theme1 + theme(axis.title.x = element_blank(), legend.position = c(.8, .95), legend.justification = c("right", "top"), legend.box.just = "right", legend.margin = margin(6, 6, 6, 6)) + annotate(geom = "text", size = 7, x = as.POSIXct("2020-01-22 03:00:00"), y = 225, label = "one-hour average")
+line
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n <- nrow(Final)
+m <- lm(`BAM1022-697` ~ `DTII-811_RH`, Final)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+Final$diffSq <- (Final$`BAM1022-697` - Final$`DTII-811_RH`) ^ 2
+mean_diff_sqr <- mean(Final$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(Final$`BAM1022-697`, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+p4 <- ggplot(data = Final, aes(x = `DTII-811_RH`, y = `BAM1022-697`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(size = 2, color = "black") + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 30, y = 130) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "DTII-811_RH", y = "BAM1022-697") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 30, y = 140) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " one-hour average")), x = 30, y = 150) +
+  annotate("text", size = 7, label = expr(paste("RMSE: ", !!rmse, " ", mu, "g ", ~m^{-3})), x = 30, y = 120) +  annotate("text", size = 7, label = expr(paste("NRMSE: ", !!nrmse, "%")), x = 30, y = 110) + scale_x_continuous(limits = c(0, 200)) + scale_y_continuous(limits = c(0, 200)) + theme2
+p4
+
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n <- nrow(Final)
+m <- lm(`BAM1022-697` ~ `DTII-809_dryer`, Final)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+Final$diffSq <- (Final$`BAM1022-697` - Final$`DTII-809_dryer`) ^ 2
+mean_diff_sqr <- mean(Final$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(Final$`BAM1022-697`, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+p4 <- ggplot(data = Final, aes(x = `DTII-809_dryer`, y = `BAM1022-697`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(size = 2, color = "black") + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 30, y = 130) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "DTII-809_dryer", y = "BAM1022-697") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 30, y = 140) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " one-hour average")), x = 30, y = 150) +
+  annotate("text", size = 7, label = expr(paste("RMSE: ", !!rmse, " ", mu, "g ", ~m^{-3})), x = 30, y = 120) +  annotate("text", size = 7, label = expr(paste("NRMSE: ", !!nrmse, "%")), x = 30, y = 110) + scale_x_continuous(limits = c(0, 200)) + scale_y_continuous(limits = c(0, 200)) + theme2
+p4
+
+```
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n <- nrow(Final)
+m <- lm(`DTII-809_dryer` ~ `DTII-811_RH`, Final)
+s <- summary(m)
+r <- round(s$adj.r.squared, digits = 2)
+Final$diffSq <- (Final$`DTII-809_dryer` - Final$`DTII-811_RH`) ^ 2
+mean_diff_sqr <- mean(Final$diffSq, na.rm = TRUE)
+nrmse <- round((sqrt(mean_diff_sqr) / mean(Fina$PM2.5, na.rm = TRUE)) * 100, digits = 2)
+rmse <- round(sqrt(mean_diff_sqr), digits = 2)
+p4 <- ggplot(data = Final, aes(x = `DTII-811_RH`, y = `DTII-809_dryer`)) +
+  geom_abline(slope = 1, intercept = 0, color = "black", size = 0.8, linetype = "dashed") +
+  geom_point(size = 2, color = "black") + annotate("text", size = 7, label = expr(paste(!!reg_eqn(s))), x = 130, y = 40) + geom_smooth(method = lm, size = 1.2, se = FALSE, formula = y ~ x, color = "black") +
+  labs(x = "DTII-811_RH", y = "DTII-809_dryer") + 
+  annotate("text", size = 7, label = expr(paste("N: ", !!n, "; ", R^{2}, ": ", !!r)), x = 130, y = 50) +
+  annotate("text", size = 7, label = expr(paste(PM[2.5], " one-hour average")), x = 130, y = 60) +
+  annotate("text", size = 7, label = expr(paste("RMSE: ", !!rmse, " ", mu, "g ", ~m^{-3})), x = 130, y = 30) +  annotate("text", size = 7, label = expr(paste("NRMSE: ", !!nrmse, "%")), x = 130, y = 20) + scale_x_continuous(limits = c(0, 200)) + scale_y_continuous(limits = c(0, 200)) + theme2
+p4
+
+```
+
+
+
+```{r}
+BAM <- read.csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/BAM.csv", header = TRUE) %>%
+  select(date, "BAM1022-697" = BAM1022.697, "BAM1022-131" = BAM1022.131)
+DTII <- read.csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/DTII.csv", header = TRUE) %>%
+  select(date, "DTII-811" = DTII.811, "DTII-809" = DTII.809)
+DTDRX <- read.csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/DTDRX.csv", header = TRUE) %>%
+  select(date, "DTDRX-602" = DTDRX.602, "DTDRX-603" = DTDRX.603)
+
+DTII_DRX <- DTII %>%
+  full_join(DTDRX, by = "date") %>%
+  left_join(BAM, by = "date")
+
+# write.csv(DTII_DRX, "D:/Data to share with sir and jonathan/MAPAN/All_data.csv")
+```
+
