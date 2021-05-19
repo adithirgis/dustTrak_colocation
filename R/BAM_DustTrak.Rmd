@@ -17,6 +17,7 @@ library(openair)
 library(ggplot2)
 library(data.table)
 library(patchwork)
+library(here)
 
 ```
 
@@ -59,14 +60,14 @@ theme1 <- theme_minimal() + theme(legend.text = element_text(size = 20),
 
 ```{r, echo = FALSE, message = FALSE, warning = FALSE}
 
-Dustrak11 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_13_h173313_CSTEP_DT809_8530.csv", skip = 28)
+Dustrak11 <- read_csv(here("data", "2019_08_13_h173313_CSTEP_DT809_8530.csv"), skip = 28)
 Dustrak11 <- Dustrak11 %>%
   mutate(date = strptime(paste(`dd-MM-yyyy`, `hh:mm:ss`), format = "%d-%m-%Y %H:%M:%S")) %>%
   mutate(date = as.POSIXct(date, format = '%Y-%m-%d %H:%M:%S', tz = "Asia/Kolkata"),
          `DTII-809` = `mg/m^3` * 1000) %>%
   select(date, `DTII-809`)
 
-Dustrak12 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_30_h134429_CSTEP_DT809_8530.csv", skip = 28)
+Dustrak12 <- read_csv(here("data","2019_08_30_h134429_CSTEP_DT809_8530.csv"), skip = 28)
 Dustrak12 <- Dustrak12 %>%
   mutate(date = strptime(paste(`MM/dd/yyyy`, `hh:mm:ss`), format = "%m/%d/%Y %H:%M:%S")) %>%
   mutate(date = as.POSIXct(date, format = '%Y-%m-%d %H:%M:%S', tz = "Asia/Kolkata"),
@@ -75,8 +76,8 @@ Dustrak12 <- Dustrak12 %>%
 Dustrak1 <- rbind(Dustrak11, Dustrak12)
 
 
-Dustrak21 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_13_h173158_CSTEP_DT811_8530.csv", skip = 28)
-Dustrak22 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_30_h134437_CSTEP_DT811_8530.csv", skip = 28)
+Dustrak21 <- read_csv(here("data","2019_08_13_h173158_CSTEP_DT811_8530.csv"), skip = 28)
+Dustrak22 <- read_csv(here("data","2019_08_30_h134437_CSTEP_DT811_8530.csv"), skip = 28)
 Dustrak2 <- rbind(Dustrak21, Dustrak22)
 Dustrak2 <- Dustrak2 %>%
   mutate(date = strptime(paste(`dd-MM-yyyy`, `hh:mm:ss`), format = "%d-%m-%Y %H:%M:%S")) %>%
@@ -207,8 +208,8 @@ p2
 
 ```{r, echo= FALSE,message=FALSE, warning=FALSE}
 
-Dustrak11 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_13_h173309_CSTEP_DT602_8533.csv", skip = 28)
-Dustrak12 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_30_h134435_CSTEP_DT602_8533.csv", skip = 28)
+Dustrak11 <- read_csv(here("data","2019_08_13_h173309_CSTEP_DT602_8533.csv"), skip = 28)
+Dustrak12 <- read_csv(here("data","2019_08_30_h134435_CSTEP_DT602_8533.csv"), skip = 28)
 Dustrak1 <- rbind(Dustrak11, Dustrak12)
 Dustrak1 <- Dustrak1 %>%
   dplyr::select("Date" = `dd-MM-yyyy`, "Time" = `hh:mm:ss`, "DTDRX-602" = `mg/m^3_1`) %>%
@@ -218,8 +219,8 @@ Dustrak1 <- Dustrak1 %>%
   select(date, `DTDRX-602`)
 
 
-Dustrak21 <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_13_h173246_CSTEP_DT603_8533.csv", skip = 28)
-Dustrak22  <- read_csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/2019_08_30_h134439_CSTEP_DT603_8533.csv", skip = 28)
+Dustrak21 <- read_csv(here("data","2019_08_13_h173246_CSTEP_DT603_8533.csv"), skip = 28)
+Dustrak22  <- read_csv(here("data","2019_08_30_h134439_CSTEP_DT603_8533.csv"), skip = 28)
   
 Dustrak2  <- rbind(Dustrak21, Dustrak22)
 Dustrak2 <- Dustrak2 %>%
@@ -315,12 +316,12 @@ p7
 
 
 ```{r results = 'hide', message = FALSE, warning = FALSE}
-dir <- "D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/BAM_files/"
+dir <- here("data", "BAM_files")
 # CSTEP_BAM.CSV
 df_bam_1hr <- data.frame()
 shp_list1 <- list.files(dir, pattern = "\\.CSV$")
 for (fil in (shp_list1)) {
-  bam <- read.csv(paste0("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/BAM_files/", fil), skip = 4)#BAM skip 5 for UT BAM
+  bam <- read.csv(paste0(as.character(here("data", "BAM_files/")), fil), skip = 4)#BAM skip 5 for UT BAM
   bam <- bam %>%
     mutate(date = as.POSIXct(Time, format='%Y-%m-%d  %H:%M:%S', tz = "Asia/Kolkata")) %>%
     select(date, "BAM1022-697" = ConcHR.ug.m3., "RT_BAM" = ConcRT.ug.m3., "FRH" = FRH..., "Status" = Status)
@@ -339,16 +340,16 @@ df_bam_1hr <- df_bam_1hr[!duplicated(df_bam_1hr$date), ]
 setDT(df_bam_1hr)
 setkey(df_bam_1hr, date)
 
-df_bam1_1hr <- read.csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/UT_BAM.CSV", sep = ",", skip = 4)
+df_bam1_1hr <- read.csv(here("data", "UT_BAM.CSV"), sep = ",", skip = 4)
 df_bam1_1hr <- df_bam1_1hr %>%
     mutate(date = as.POSIXct(Time, format='%Y-%m-%d  %H:%M:%S', tz = "Asia/Kolkata")) %>%
     select(date, "BAM1022-131" = ConcHR.ug.m3., "RT_BAM" = ConcRT.ug.m3., "FRH" = FRH..., "Status" = Status)
-bam1 <- read.csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/UT_BAM_DATA.CSV", sep = ",", skip = 4)
+bam1 <- read.csv(here("data", "UT_BAM_DATA.CSV"), sep = ",", skip = 4)
 bam1 <- bam1 %>%
     mutate(date = as.POSIXct(Time, format='%d-%m-%Y  %H:%M', tz = "Asia/Kolkata")) %>%
     select(date, "BAM1022-131" = ConcHR.ug.m3., "RT_BAM" = ConcRT.ug.m3., "FRH" = FRH..., "Status" = Status)
 bam1 <- filter(bam1, (month(date) > 06))
-bam2 <- read.csv("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/DT112744.CSV", sep = ",", skip = 4)
+bam2 <- read.csv(here("data", "DT112744.CSV"), sep = ",", skip = 4)
 
 bam2 <- bam2 %>%
     mutate(date = as.POSIXct(Time, format='%Y-%m-%d  %H:%M:%S', tz = "Asia/Kolkata")) %>%
@@ -487,11 +488,11 @@ VecFunc <- function(x) {
   }
 }
 
-dir <- "D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/Met/"
+dir <- here("data", "Met")
 files <- list.files(dir, pattern = "\\.CSV$")
 df <- data.frame()
 for(each_file in (files)) {
-  met_one <- read.csv(paste("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/Met/", each_file, sep = ""), skip = 1)
+  met_one <- read.csv(paste(as.character(here("data", "Met/")), each_file, sep = ""), skip = 1)
   df <- rbind(df, met_one)
 }
 df <- df[df$ATMP.degC. != 0.000, ]
@@ -510,10 +511,10 @@ df_DT809 <- data.frame()
 df_bam <- data.frame()
 df_DT809_1hr <- data.frame()
 
-dir <- "D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/DT/"
+dir <- here("data", "DT")
 shp_list <- list.files(dir, pattern = "\\.csv$")
 for (file in (shp_list)) {
-  Dustrak1 <- read.csv(paste("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/DT/", file, sep = ""), skip = 28)
+  Dustrak1 <- read.csv(paste(as.character(here("data", "DT/")), file, sep = ""), skip = 28)
   Dustrak1 <- Dustrak1 %>%
     mutate(date = strptime(paste(dd.MM.yyyy, hh.mm.ss), format = "%d-%m-%Y %H:%M:%S", tz = "Asia/Kolkata"), 
            "DTII-809" = mg.m.3 * 1000) %>%
@@ -543,10 +544,10 @@ setkey(df_DT809_1hr, date)
 # BAM
 
 df_bam_1hr <- data.frame()
-dir <- "D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/BAM_DT_files/"
+dir <- here("data", "BAM_DT_files")
 shp_list1 <- list.files(dir, pattern = "\\.CSV$")
 for (fil in (shp_list1)) {
-  bam <- read.csv(paste("D:/Dropbox/ILKConsultancy/dustTrak_colocation/data/BAM_DT_files/", fil, sep = ""), skip = 4)#BAM skip 5 for UT BAM
+  bam <- read.csv(paste(as.character(here("data", "BAM_DT_files/")), fil, sep = ""), skip = 4)#BAM skip 5 for UT BAM
   df_bam_1hr <- rbind(df_bam_1hr, bam)
 }
 df_bam_1hr <- df_bam_1hr %>%
